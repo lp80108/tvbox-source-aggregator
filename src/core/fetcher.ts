@@ -1,6 +1,6 @@
 // 批量 fetch TVBox JSON 配置
 
-import { DEFAULT_FETCH_TIMEOUT_MS } from './config';
+import { DEFAULT_FETCH_TIMEOUT_MS, TVBOX_UA } from './config';
 import { decodeConfigResponse } from './decoder';
 import type { TVBoxConfig, SourcedConfig, SourceEntry, SourceFetchResult } from './types';
 
@@ -125,7 +125,7 @@ async function fetchSingleConfig(
       signal: controller.signal,
       headers: {
         'Accept': 'application/json, text/plain, */*',
-        'User-Agent': 'okhttp/3.12.0',
+        'User-Agent': TVBOX_UA,
       },
     });
 

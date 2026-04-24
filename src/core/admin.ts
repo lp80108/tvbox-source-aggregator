@@ -321,6 +321,18 @@ ${sharedStyles}
     </div>
 
     <div class="section">
+      <div class="section-title" data-i18n="speedTestToggle">Site Speed Test</div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="speedTestCheck" onchange="saveSpeedTest()" checked>
+          <span data-i18n="speedTestLabel">Enable site speed test and unreachable filtering</span>
+        </label>
+        <span class="status-text" id="speedTestStatus" style="font-family:var(--mono);font-size:0.75rem"></span>
+      </div>
+      <div style="margin-top:6px;font-size:0.8rem;color:var(--text-secondary)" data-i18n="speedTestDesc">When disabled, all sites are kept without testing reachability</div>
+    </div>
+
+    <div class="section">
       <div class="section-title" data-i18n="nameTransform">Name Transform</div>
       <div class="nt-grid">
         <div>
@@ -397,6 +409,7 @@ const translations = {
     ntPrefixPh:'e.g. 【RioTV】', ntSuffixPh:'e.g.  · Curated',
     ntPromoReplacePh:'e.g. Premium', ntExtraPatternsPh:'e.g. sponsor[：:]\\\\S+',
     cronInterval:'Aggregation Schedule',
+    speedTestToggle:'Site Speed Test', speedTestLabel:'Enable site speed test and unreachable filtering', speedTestDesc:'When disabled, all sites are kept without testing reachability',
     cronEvery1h:'Every 1 hour', cronEvery3h:'Every 3 hours', cronEvery6h:'Every 6 hours',
     cronEvery12h:'Every 12 hours', cronEveryDay:'Once a day',
     save:'Save', saving:'Saving...', saved:'Saved', saveFailed:'Save failed',
@@ -444,6 +457,7 @@ const translations = {
     ntPrefixPh:'如 【RioTV】', ntSuffixPh:'如  · 精选',
     ntPromoReplacePh:'如 精选推荐', ntExtraPatternsPh:'如 sponsor[：:]\\\\S+',
     cronInterval:'聚合频率',
+    speedTestToggle:'站点测速', speedTestLabel:'启用站点测速与不可达剔除', speedTestDesc:'关闭后保留所有站点，不进行可达性检测',
     cronEvery1h:'每 1 小时', cronEvery3h:'每 3 小时', cronEvery6h:'每 6 小时',
     cronEvery12h:'每 12 小时', cronEveryDay:'每天一次',
     save:'保存', saving:'保存中...', saved:'已保存', saveFailed:'保存失败',
@@ -497,6 +511,7 @@ async function loadAll() {
   loadStatus();
   loadNameTransform();
   loadCronInterval();
+  loadSpeedTest();
 }
 
 async function loadStatus() {
@@ -934,6 +949,44 @@ async function saveCronInterval() {
 
   btn.textContent = t('save');
   btn.className = 'btn btn-sm';
+  setTimeout(() => { status.textContent = ''; }, 3000);
+}
+
+// --- Speed Test Toggle ---
+async function loadSpeedTest() {
+  try {
+    const res = await auth.authFetch('/admin/speed-test');
+    if (res.ok) {
+      const d = await res.json();
+      $('speedTestCheck').checked = d.enabled;
+    }
+  } catch {}
+}
+
+async function saveSpeedTest() {
+  const status = $('speedTestStatus');
+  const enabled = $('speedTestCheck').checked;
+  status.textContent = '';
+
+  try {
+    const res = await auth.authFetch('/admin/speed-test', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled })
+    });
+    if (res.ok) {
+      status.textContent = t('saved');
+      status.className = 'status-text success';
+    } else {
+      const d = await res.json();
+      status.textContent = d.error || t('saveFailed');
+      status.className = 'status-text error';
+    }
+  } catch {
+    status.textContent = t('networkError');
+    status.className = 'status-text error';
+  }
+
   setTimeout(() => { status.textContent = ''; }, 3000);
 }
 

@@ -1,5 +1,6 @@
 // 本地 HTTP 测速（替代 zbape 第三方 API）
 
+import { TVBOX_UA } from './config';
 import type { TVBoxSite } from './types';
 
 export interface SpeedResult {
@@ -18,7 +19,7 @@ export async function httpSpeedTest(url: string, timeoutMs: number): Promise<num
     const start = Date.now();
     const resp = await fetch(url, {
       signal: controller.signal,
-      headers: { 'User-Agent': 'okhttp/3.12.0' },
+      headers: { 'User-Agent': TVBOX_UA },
     });
     const speedMs = Date.now() - start;
 

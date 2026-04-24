@@ -18,6 +18,9 @@ export const KV_LIVE_SCRAPED = 'live_scraped';
 // 直播源代理缓存 TTL（秒）
 export const LIVE_PROXY_TTL = 7200; // 2 小时
 
+// 图片代理缓存 TTL（秒）
+export const IMG_PROXY_TTL = 604800; // 7 天
+
 // 黑名单
 export const KV_BLACKLIST = 'blacklist';
 
@@ -29,6 +32,12 @@ export const KV_NAME_TRANSFORM = 'name_transform';
 
 // 源健康状态
 export const KV_SOURCE_HEALTH = 'source_health';
+
+// 站点测速开关（默认启用）
+export const KV_SPEED_TEST_ENABLED = 'speed_test_enabled';
+
+// TVBox 标准浏览器 UA（与 TVBox-Pro 播放器一致）
+export const TVBOX_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.54 Safari/537.36';
 
 // 定时任务间隔（分钟）
 export const KV_CRON_INTERVAL = 'cron_interval';

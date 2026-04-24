@@ -3,7 +3,7 @@
 import { Hono } from 'hono';
 import type { Storage } from './storage/interface';
 import type { AppConfig, SourceEntry, MacCMSSourceEntry, LiveSourceEntry, NameTransformConfig } from './core/types';
-import { KV_MERGED_CONFIG, KV_MERGED_CONFIG_FULL, KV_MANUAL_SOURCES, KV_LAST_UPDATE, KV_MACCMS_SOURCES, KV_LIVE_SOURCES, KV_BLACKLIST, LIVE_PROXY_TTL, KV_INLINE_PREFIX, KV_NAME_TRANSFORM, KV_CRON_INTERVAL, DEFAULT_CRON_INTERVAL, KV_SOURCE_HEALTH } from './core/config';
+import { KV_MERGED_CONFIG, KV_MERGED_CONFIG_FULL, KV_MANUAL_SOURCES, KV_LAST_UPDATE, KV_MACCMS_SOURCES, KV_LIVE_SOURCES, KV_BLACKLIST, LIVE_PROXY_TTL, IMG_PROXY_TTL, KV_INLINE_PREFIX, KV_NAME_TRANSFORM, KV_CRON_INTERVAL, DEFAULT_CRON_INTERVAL, KV_SOURCE_HEALTH, KV_SPEED_TEST_ENABLED } from './core/config';
 import { parseConfigJson, isMultiRepoConfig, extractMultiRepoEntries } from './core/fetcher';
 import { decodeConfigResponse } from './core/decoder';
 import { validateMacCMS } from './core/maccms';
@@ -369,6 +369,35 @@ export function createApp(deps: AppDeps): Hono {
     return c.json({ success: true, interval });
   });
 
+  // ─── 站点测速开关 ──────────────────────────────────────
+  app.get('/admin/speed-test', async (c) => {
+    if (!verifyAdmin(c.req.raw, config)) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+    const raw = await storage.get(KV_SPEED_TEST_ENABLED);
+    return c.json({ enabled: raw !== 'false' });
+  });
+
+  app.put('/admin/speed-test', async (c) => {
+    if (!verifyAdmin(c.req.raw, config)) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+
+    let body: { enabled?: boolean };
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: 'Invalid JSON' }, 400);
+    }
+
+    if (typeof body.enabled !== 'boolean') {
+      return c.json({ error: 'enabled must be a boolean' }, 400);
+    }
+
+    await storage.put(KV_SPEED_TEST_ENABLED, String(body.enabled));
+    return c.json({ success: true, enabled: body.enabled });
+  });
+
   // ─── MacCMS 边缘代理（仅 CF 版）──────────────────────
   if (config.workerBaseUrl) {
     app.all('/api/:key', async (c) => {
@@ -478,6 +507,54 @@ export function createApp(deps: AppDeps): Hono {
           headers: {
             'Content-Type': 'text/plain; charset=utf-8',
             'Cache-Control': `public, max-age=${LIVE_PROXY_TTL}`,
+            'Access-Control-Allow-Origin': '*',
+          },
+        });
+
+        c.executionCtx.waitUntil(cache.put(cacheKey, response.clone()));
+        return response;
+      } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : String(error);
+        return c.json({ error: msg }, 502);
+      }
+    });
+  }
+
+  // ─── 图片代理（仅 CF 版）──────────────────────────────
+  if (config.workerBaseUrl) {
+    app.get('/img/*', async (c) => {
+      // 从完整 URL 中提取原始图片地址（/img/ 之后的所有内容，含 query string）
+      const fullUrl = c.req.url;
+      const marker = '/img/';
+      const markerIdx = fullUrl.indexOf(marker);
+      const originalUrl = fullUrl.substring(markerIdx + marker.length);
+
+      if (!originalUrl.startsWith('http://') && !originalUrl.startsWith('https://')) {
+        return c.json({ error: 'Invalid image URL' }, 400);
+      }
+
+      // 1. 查 CF Cache
+      const cache = (caches as any).default as Cache;
+      const cacheKey = new Request(c.req.url);
+      const cached = await cache.match(cacheKey);
+      if (cached) return cached;
+
+      // 2. 回源拉取
+      try {
+        const resp = await fetch(originalUrl, {
+          headers: { 'User-Agent': 'okhttp/3.12.0' },
+        });
+
+        if (!resp.ok) {
+          return c.json({ error: `Origin returned ${resp.status}` }, 502);
+        }
+
+        // 3. 构建响应 + 异步写缓存
+        const contentType = resp.headers.get('Content-Type') || 'image/jpeg';
+        const response = new Response(resp.body, {
+          headers: {
+            'Content-Type': contentType,
+            'Cache-Control': `public, max-age=${IMG_PROXY_TTL}`,
             'Access-Control-Allow-Origin': '*',
           },
         });

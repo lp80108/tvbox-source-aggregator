@@ -8,7 +8,7 @@ import { batchSiteSpeedTest, appendSpeedToName, filterUnreachableSites } from '.
 import { macCMSToTVBoxSites, processMacCMSForLocal } from './core/maccms';
 import { rewriteJarUrls } from './core/jar-proxy';
 import { batchTestLiveSources, liveSourcesToTVBoxLives } from './core/live-source';
-import { KV_MERGED_CONFIG, KV_MERGED_CONFIG_FULL, KV_SOURCE_URLS, KV_LAST_UPDATE, KV_MANUAL_SOURCES, KV_MACCMS_SOURCES, KV_LIVE_SOURCES, KV_BLACKLIST, KV_INLINE_PREFIX, KV_NAME_TRANSFORM, KV_SOURCE_HEALTH } from './core/config';
+import { KV_MERGED_CONFIG, KV_MERGED_CONFIG_FULL, KV_SOURCE_URLS, KV_LAST_UPDATE, KV_MANUAL_SOURCES, KV_MACCMS_SOURCES, KV_LIVE_SOURCES, KV_BLACKLIST, KV_INLINE_PREFIX, KV_NAME_TRANSFORM, KV_SOURCE_HEALTH, KV_SPEED_TEST_ENABLED } from './core/config';
 import { loadBlacklist, applyBlacklist, pruneBlacklist, saveBlacklist } from './core/blacklist';
 import { transformSiteNames } from './core/cleaner';
 import { parseConfigJson } from './core/fetcher';
@@ -165,7 +165,12 @@ async function _runAggregation(storage: Storage, config: AppConfig, startTime: n
   }
 
   // Step 6: 站点测速 + 不可达过滤 + name 标记（CF 和 Node.js 统一）
-  if (merged.sites && merged.sites.length > 0) {
+  const speedTestRaw = await storage.get(KV_SPEED_TEST_ENABLED);
+  const speedTestEnabled = speedTestRaw !== 'false'; // 默认启用
+
+  if (!speedTestEnabled) {
+    console.log('[aggregation] Step 6: Speed test disabled, skipping');
+  } else if (merged.sites && merged.sites.length > 0) {
     console.log('[aggregation] Step 6: Site speed test + unreachable filtering...');
     const speedMap = await batchSiteSpeedTest(merged.sites, config.siteTimeoutMs);
 
@@ -189,6 +194,12 @@ async function _runAggregation(storage: Storage, config: AppConfig, startTime: n
     merged = await rewriteJarUrls(merged, config.workerBaseUrl, storage);
   } else {
     console.log('[aggregation] Step 7: Skipping JAR rewrite (local mode)');
+  }
+
+  // Step 7.5: CF 模式注入图片代理前缀
+  if (config.workerBaseUrl) {
+    merged.pic = `${config.workerBaseUrl.replace(/\/$/, '')}/img/`;
+    console.log(`[aggregation] Step 7.5: Injected pic proxy: ${merged.pic}`);
   }
 
   // Step 8: 存入存储
